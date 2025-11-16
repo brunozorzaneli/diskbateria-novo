@@ -2,27 +2,9 @@
 /* DB BLOG LIST v17 (moved inside PHP) */
 
 // --- CFG: Blog cache behavior ---
-if (!defined('BLOG_CACHE_MODE')) {
-    // 'mixed' (default): read cache; if missing/expired, fetch & refresh (current behavior).
-    // 'read-only': read cache only; if missing/expired, serve last good cache (for CRON-managed updates).
-    define('BLOG_CACHE_MODE', 'read-only');
-}
 if (!defined('BLOG_CACHE_MAX_AGE')) {
     // seconds; keep existing default if there is one in the file; this is just a fallback.
     define('BLOG_CACHE_MAX_AGE', 900);
-
-// --- Helper: decide if we should fetch during render ---
-if (!function_exists('blog_cache_should_fetch')) {
-    function blog_cache_should_fetch($cache_is_valid, $cache_exists) {
-        if (BLOG_CACHE_MODE === 'read-only') {
-            // Never fetch during render; serve existing cache even if expired (stale-while-revalidate).
-            return false;
-        }
-        // Default behavior: fetch when cache is invalid/missing.
-        return !$cache_is_valid;
-    }
-}
-// --- /Helper ---
 }
 // --- /CFG ---
 
@@ -55,7 +37,6 @@ if (!function_exists('db_cache_path')) { function db_cache_path(){ $root=__DIR__
 if (!function_exists('db_read_cache')) { function db_read_cache($max_age=900){ $file=db_cache_path(); if(is_file($file)){ $age=time()-filemtime($file); if($age<=$max_age){ $raw=@file_get_contents($file); $d=db_safe_json_decode($raw); if(is_array($d)) return $d; } } return null; } }
 if (!function_exists('db_write_cache')) { function db_write_cache($data){ @file_put_contents(db_cache_path(),json_encode($data)); }
 if (!function_exists('db_read_cache_stale')) { function db_read_cache_stale(){ $file=db_cache_path(); if(is_file($file)){ $raw=@file_get_contents($file); $d=@json_decode($raw,true); if(is_array($d)) return $d; } return null; } }
-if (!function_exists('db_cache_is_expired')) { function db_cache_is_expired($max_age){ $file=db_cache_path(); if(is_file($file)){ $age=time()-@filemtime($file); return ($age>$max_age); } return true; } }
  }
 
 if (!function_exists('db_decode_entities')) {
