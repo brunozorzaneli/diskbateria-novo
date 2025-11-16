@@ -355,7 +355,8 @@ SVG;
     <?= $faq_chevron_svg ?>
 </summary>
 <div class="a">Sim, emitimos nota fiscal em todas as vendas.</div>
-</details><details>
+</details>
+<details>
 <summary>
 <span aria-hidden="true" class="icon">🏷️</span>
 <span class="q">Quais marcas de bateria vocês têm?</span>
@@ -363,7 +364,6 @@ SVG;
 </summary>
 <div class="a">Trabalhamos com as marcas Moura, Heliar, Zetta, Master, Jupiter e AC-Delco.</div>
 </details>
-</div>
 <details>
 <summary>
 <span aria-hidden="true" class="icon">⚡</span>
@@ -372,6 +372,7 @@ SVG;
 </summary>
 <div class="a">Sim, atendemos no local com carga auxiliar e teste básico na hora.</div>
 </details>
+</div>
 </div>
 </section>
 <?php /* INÍCIO da seção Encontre por modelo — para reativar, mude $ENCONTRE_POR_MODELO_ATIVA para true */ ?>
