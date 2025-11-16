@@ -1,0 +1,7 @@
+# Block web access to sensitive files
+<Files "config.php">
+  Require all denied
+</Files>
+<Files "gbp-cache.json">
+  Require all denied
+</Files>

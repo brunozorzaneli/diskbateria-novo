@@ -1,0 +1,7 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" role="img" aria-label="Dinheiro">
+  <rect x="1" y="1" width="62" height="38" rx="6" ry="6" fill="#ffffff" fill-opacity="0.9" stroke="#cbd5e1"/>
+  <rect x="10" y="8" width="44" height="24" rx="4" ry="4" fill="#e2e8f0" stroke="#cbd5e1"/>
+  <circle cx="32" cy="20" r="7.5" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="32" y="21.5" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="10" fill="#0f172a">R$</text>
+</svg>

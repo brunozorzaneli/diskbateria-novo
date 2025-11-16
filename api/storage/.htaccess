@@ -1,0 +1,16 @@
+# Protect /api/storage from direct web access
+# Compatible with Apache 2.4+ and falls back for 2.2
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Deny from all
+</IfModule>
+
+# Disable directory listing (belt and suspenders)
+Options -Indexes
+
+# Optional: prevent caching if the server still attempts to serve anything from here
+<IfModule mod_headers.c>
+  Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+</IfModule>

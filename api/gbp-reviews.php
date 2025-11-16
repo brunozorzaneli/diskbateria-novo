@@ -1,0 +1,169 @@
+<?php
+// /novoseo/api/gbp-reviews.php — Disk Bateria (robusto c/ foto do autor)
+declare(strict_types=1);
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=30, stale-if-error=86400');
+
+/**
+ * Ajustes rápidos:
+ * - Configure sua chave no config.php como define('DISK_G_API_KEY','...');
+ * - Verifique se o Places API (New) está HABILITADO no projeto da chave.
+ * - Se usa restrição por IP, libere o IP de saída do servidor.
+ */
+
+$placeId    = 'ChIJM-p-4soXuAARBiz2nmmBPUY'; // Disk Bateria
+$lang       = isset($_GET['lang']) ? $_GET['lang'] : 'pt-BR';
+$maxReviews = 5;                   // limite de reviews no JSON de saída
+$ttl        = 3 * 24 * 3600;      // 3 dias de validade do cache      // 5 dias de validade do cache
+
+// === Carrega API key do config.php (fora da webroot, protegido por .htaccess) ===
+$apiKey = null;
+$configFile = __DIR__ . '/config.php';
+if (file_exists($configFile)) {
+  require $configFile;
+  if (defined('DISK_G_API_KEY')) { $apiKey = DISK_G_API_KEY; }
+}
+
+function respond($arr, $http = 200){
+  http_response_code($http);
+  echo json_encode($arr, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+  exit;
+}
+
+function ensure_dir($dir){
+  if (!is_dir($dir)) { @mkdir($dir, 0755, true); }
+}
+
+$cacheDir  = __DIR__ . '/storage';
+ensure_dir($cacheDir);
+$cacheFile = $cacheDir . '/gbp-cache.json';
+
+// === Helper: lê cache se existente e válido ===
+function read_cache($file, $ttl){
+  if (is_file($file)) {
+    $age = time() - @filemtime($file);
+    if ($age >= 0 && $age <= $ttl) {
+      $raw = @file_get_contents($file);
+      if ($raw !== false) {
+        $json = @json_decode($raw, true);
+        if (is_array($json)) return ['data'=>$json, 'age'=>$age];
+      }
+    }
+  }
+  return null;
+}
+
+$debug = isset($_GET['debug']);
+
+// 1) Se houver cache válido, devolve já
+if ($c = read_cache($cacheFile, $ttl)) {
+  respond(['source'=>'cache','age_seconds'=>$c['age'],'data'=>$c['data']]);
+}
+
+// 2) Sem cache (ou expirado): tenta live fetch
+if (!$apiKey){
+  // Sem chave, não consegue live. Se houver cache inválido, tenta mesmo assim devolver (melhor que nada).
+  if (is_file($cacheFile)){
+    $raw = @file_get_contents($cacheFile);
+    $json = @json_decode($raw, true);
+    if (is_array($json)) {
+      respond(['source'=>'stale-cache','data'=>$json,'warning'=>'Sem API key (DISK_G_API_KEY).'], 200);
+    }
+  }
+  respond(['error'=>'API key ausente. Defina DISK_G_API_KEY no config.php'], 500);
+}
+
+// Places API v1 endpoint (New Places): solicita campos necessários, incluindo foto do autor
+$fields = implode(',', [
+  'rating',
+  'userRatingCount',
+  // Campos do review
+  'reviews.text',
+  'reviews.rating',
+  'reviews.publishTime',
+  'reviews.authorAttribution.displayName',
+  'reviews.authorAttribution.uri',
+  'reviews.authorAttribution.photoUri'
+]);
+
+$url = 'https://places.googleapis.com/v1/places/' . rawurlencode($placeId) .
+       '?fields=' . rawurlencode($fields) .
+       '&languageCode=' . rawurlencode($lang);
+
+// cURL
+$ch = curl_init();
+curl_setopt_array($ch, [
+  CURLOPT_URL            => $url,
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_TIMEOUT        => 10,
+  CURLOPT_CONNECTTIMEOUT => 6,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_SSL_VERIFYPEER => true,
+  CURLOPT_SSL_VERIFYHOST => 2,
+  CURLOPT_HTTPHEADER     => [
+    'X-Goog-Api-Key: ' . $apiKey,
+    'X-Goog-FieldMask: ' . $fields,  // opcional, reforça a máscara
+    'Accept: application/json'
+  ],
+  CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_2TLS,
+  CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
+  CURLOPT_USERAGENT      => 'DiskBateria/1.0 (+novoseo)'
+]);
+
+$resp = curl_exec($ch);
+$err  = curl_error($ch);
+$code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+if ($resp === false || $code < 200 || $code >= 300){
+  // Falha na API: se existir QUALQUER cache, devolve-o (mesmo expirado) para não quebrar o front.
+  if (is_file($cacheFile)){
+    $raw = @file_get_contents($cacheFile);
+    $json = @json_decode($raw, true);
+    if (is_array($json)) {
+      $extra = ['source'=>'stale-cache','data'=>$json];
+      if ($debug){
+        $extra['debug'] = ['http'=>$code,'curl_error'=>$err,'upstream'=>@json_decode($resp,true)];
+      }
+      respond($extra, 200);
+    }
+  }
+  $extra = ['error'=>'Falha na Places API','http'=>$code];
+  if ($debug){ $extra['curl_error'] = $err; $extra['upstream'] = @json_decode($resp, true); }
+  respond($extra, 502);
+}
+
+$j = @json_decode($resp, true);
+if (!is_array($j)){
+  respond(['error'=>'JSON inválido da API'], 502);
+}
+
+// Mapeia estrutura para saída enxuta
+$out = [
+  'rating'         => $j['rating'] ?? null,
+  'userRatingCount'=> $j['userRatingCount'] ?? null,
+  'reviews'        => []
+];
+
+$srcReviews = $j['reviews'] ?? [];
+if (is_array($srcReviews)){
+  foreach ($srcReviews as $r){
+    $out['reviews'][] = [
+      'rating'            => $r['rating']            ?? null,
+      'text'              => $r['text']['text']      ?? ($r['text'] ?? null),
+      'author'            => $r['authorAttribution']['displayName'] ?? null,
+      'profile'           => $r['authorAttribution']['uri'] ?? null,
+      'profile_photo_url' => $r['authorAttribution']['photoUri'] ?? null,
+      'publishTime'       => $r['publishTime']       ?? null
+    ];
+    if (count($out['reviews']) >= $maxReviews) break;
+  }
+}
+
+// Grava cache atômico (mesmo que não haja reviews, guardamos rating/contagem)
+$tmp = $cacheFile . '.tmp';
+@file_put_contents($tmp, json_encode($out, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+@chmod($tmp, 0644);
+@rename($tmp, $cacheFile);
+
+respond(['source'=>'live','data'=>$out]);
